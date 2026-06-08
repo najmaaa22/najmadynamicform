@@ -53,7 +53,7 @@ export default function ResponsesPage() {
   const [loading, setLoading] =
     useState(true);
 
-  // ✅ LOAD DATA
+ 
   useEffect(() => {
     if (!id) return;
 
@@ -75,7 +75,7 @@ export default function ResponsesPage() {
     loadData();
   }, [id]);
 
-  // ✅ FETCH RESPONSES
+
   const fetchResponses = async () => {
     try {
       const res = await API.get(
@@ -93,7 +93,7 @@ export default function ResponsesPage() {
     }
   };
 
-  // ✅ FETCH ANALYTICS
+ 
   const fetchAnalytics = async () => {
     try {
       const res = await API.get(
@@ -111,7 +111,7 @@ export default function ResponsesPage() {
     }
   };
 
-  // ✅ EXPORT CSV
+ 
   const exportCSV = () => {
     window.open(
       `http://localhost:5000/api/forms/${id}/export`,
@@ -119,7 +119,7 @@ export default function ResponsesPage() {
     );
   };
 
-  // ✅ LOADING
+ 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
@@ -249,7 +249,7 @@ export default function ResponsesPage() {
                       </div>
                     </div>
 
-                    {/* ANSWERS */}
+                  
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
 
                       {Object.entries(

@@ -1,14 +1,21 @@
-'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import api from '@/lib/api';
-import toast from 'react-hot-toast';
+"use client";
+
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import api from "@/lib/api";
+import toast from "react-hot-toast";
 
 interface User {
   _id: string;
   email: string;
   name: string;
-  role: 'admin' | 'user';
+  role: "admin" | "user";
 }
 
 interface AuthContextType {
@@ -21,12 +28,13 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (token) {
       fetchUser();
     } else {
@@ -36,10 +44,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchUser = async () => {
     try {
-      const response = await api.get('/auth/me');
+      const response = await api.get("/auth/me");
       setUser(response.data);
-    } catch (error) {
-      localStorage.removeItem('token');
+    } catch {
+      localStorage.removeItem("token");
     } finally {
       setLoading(false);
     }
@@ -47,47 +55,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await api.post('/auth/login', { email, password });
+      const response = await api.post("/auth/login", { email, password });
       const { token, user } = response.data;
-      localStorage.setItem('token', token);
+      localStorage.setItem("token", token);
       setUser(user);
-      toast.success('Login successful!');
+      toast.success("Login successful!");
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Login failed');
+      toast.error(error.response?.data?.message || "Login failed");
       throw error;
     }
   };
 
   const register = async (name: string, email: string, password: string) => {
     try {
-      const response = await api.post('/auth/register', { name, email, password });
+      const response = await api.post("/auth/register", {
+        name,
+        email,
+        password,
+      });
       const { token, user } = response.data;
-      localStorage.setItem('token', token);
+      localStorage.setItem("token", token);
       setUser(user);
-      toast.success('Registration successful!');
+      toast.success("Registration successful!");
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Registration failed');
+      toast.error(error.response?.data?.message || "Registration failed");
       throw error;
     }
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem("token");
     setUser(null);
-    toast.success('Logged out successfully');
+    toast.success("Logged out successfully");
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, register, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
+    throw new Error("useAuth must be used within AuthProvider");
   }
   return context;
 };

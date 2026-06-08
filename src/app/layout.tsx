@@ -1,10 +1,10 @@
-import type { Metadata } from 'next';
-import './globals.css';
-import { Providers } from './providers';
+import "./globals.css";
+import { Providers } from "./providers";
+import { Toaster } from "react-hot-toast";
 
-export const metadata: Metadata = {
-  title: 'Dynamic Form Builder',
-  description: 'Create and fill dynamic forms',
+export const metadata = {
+  title: "Dynamic Form Builder",
+  description: "Google Forms like system with quiz + access control",
 };
 
 export default function RootLayout({
@@ -15,7 +15,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <Toaster />
+        </Providers>
       </body>
     </html>
   );

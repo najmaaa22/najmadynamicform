@@ -51,3 +51,6 @@ export const CardTitle: React.FC<{ children: React.ReactNode; className?: string
 }) => {
   return <h3 className={`font-semibold text-lg text-slate-800 ${className}`}>{children}</h3>;
 };
+
+// ✅ Default export
+export default Card;

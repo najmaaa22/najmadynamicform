@@ -106,3 +106,6 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
     </form>
   );
 };
+
+// ✅ Add this line at the bottom
+export default DynamicForm;

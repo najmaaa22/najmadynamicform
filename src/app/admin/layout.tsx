@@ -7,7 +7,7 @@ export default function AdminLayout({
 }) {
   return (
     <div className="min-h-screen flex flex-col">
-      {/* You can use admin-specific navbar if needed */}
+     
       <Navbar />
 
       <main className="flex-1">

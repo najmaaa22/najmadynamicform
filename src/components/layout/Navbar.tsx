@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Menu, X, LayoutDashboard, FileText, LogOut } from 'lucide-react';
 
-export const Navbar: React.FC = () => {
+const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -92,10 +92,7 @@ export const Navbar: React.FC = () => {
             ))}
             {user ? (
               <button
-                onClick={() => {
-                  logout();
-                  setIsMenuOpen(false);
-                }}
+                onClick={() => { logout(); setIsMenuOpen(false); }}
                 className="w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-red-600 hover:bg-gray-50"
               >
                 <LogOut className="inline-block h-4 w-4 mr-2" />
@@ -125,3 +122,7 @@ export const Navbar: React.FC = () => {
     </nav>
   );
 };
+
+// ✅ Both named and default export
+export { Navbar };
+export default Navbar;

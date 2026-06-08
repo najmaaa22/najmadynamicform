@@ -15,7 +15,7 @@ type FormField = {
   label: string;
   type: FieldType;
   required: boolean;
-  options?: string[];
+  options: string[];
   correctAnswer?: string;
 };
 
@@ -36,22 +36,22 @@ export default function AdminPage() {
       correctAnswer: "",
     };
 
-    setFields([...fields, newField]);
+    setFields((prev) => [...prev, newField]);
   };
 
-  const updateField = (
+  const updateField = <K extends keyof FormField>(
     index: number,
-    key: keyof FormField,
-    value: any
+    key: K,
+    value: FormField[K]
   ) => {
-    const updatedFields = [...fields];
-
-    updatedFields[index] = {
-      ...updatedFields[index],
-      [key]: value,
-    };
-
-    setFields(updatedFields);
+    setFields((prev) => {
+      const updated = [...prev];
+      updated[index] = {
+        ...updated[index],
+        [key]: value,
+      };
+      return updated;
+    });
   };
 
   const handleSaveForm = () => {
@@ -63,7 +63,7 @@ export default function AdminPage() {
       fields,
     };
 
-    console.log(formData);
+    console.log("FORM DATA:", formData);
 
     alert("Form Created Successfully");
   };
@@ -76,73 +76,54 @@ export default function AdminPage() {
         </h1>
 
         <div className="space-y-6">
-          <div>
-            <label className="font-medium">
-              Form Title
-            </label>
 
-            <input
-              type="text"
-              placeholder="Enter form title"
-              value={title}
-              onChange={(e) =>
-                setTitle(e.target.value)
-              }
-              className="w-full mt-2 border rounded-xl px-4 py-3"
-            />
-          </div>
+          {/* TITLE */}
+          <input
+            type="text"
+            placeholder="Form Title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full border rounded-xl px-4 py-3"
+          />
 
-          <div>
-            <label className="font-medium">
-              Description
-            </label>
+          {/* DESCRIPTION */}
+          <textarea
+            placeholder="Description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="w-full border rounded-xl px-4 py-3 h-28"
+          />
 
-            <textarea
-              placeholder="Enter description"
-              value={description}
-              onChange={(e) =>
-                setDescription(e.target.value)
-              }
-              className="w-full mt-2 border rounded-xl px-4 py-3 h-32"
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
+          {/* QUIZ MODE */}
+          <label className="flex items-center gap-2">
             <input
               type="checkbox"
               checked={isQuiz}
-              onChange={(e) =>
-                setIsQuiz(e.target.checked)
-              }
+              onChange={(e) => setIsQuiz(e.target.checked)}
             />
+            Enable Quiz Mode
+          </label>
 
-            <label className="font-medium">
-              Enable Quiz Mode
-            </label>
-          </div>
-
+          {/* ADD FIELD */}
           <button
             onClick={addField}
-            className="w-full bg-black text-white py-3 rounded-xl hover:bg-slate-800 transition"
+            className="w-full bg-black text-white py-3 rounded-xl"
           >
-            Add Fields
+            Add Field
           </button>
 
+          {/* FIELDS */}
           {fields.map((field, index) => (
             <div
               key={field.id}
-              className="border rounded-2xl p-5 space-y-4"
+              className="border rounded-2xl p-5 space-y-3"
             >
               <input
                 type="text"
                 placeholder="Field Label"
                 value={field.label}
                 onChange={(e) =>
-                  updateField(
-                    index,
-                    "label",
-                    e.target.value
-                  )
+                  updateField(index, "label", e.target.value)
                 }
                 className="w-full border rounded-xl px-4 py-3"
               />
@@ -150,43 +131,24 @@ export default function AdminPage() {
               <select
                 value={field.type}
                 onChange={(e) =>
-                  updateField(
-                    index,
-                    "type",
-                    e.target.value
-                  )
+                  updateField(index, "type", e.target.value as FieldType)
                 }
                 className="w-full border rounded-xl px-4 py-3"
               >
                 <option value="text">Text</option>
-
-                <option value="number">
-                  Number
-                </option>
-
-                <option value="textarea">
-                  Textarea
-                </option>
-
-                <option value="select">
-                  Select
-                </option>
-
-                <option value="radio">
-                  Radio
-                </option>
-
+                <option value="number">Number</option>
+                <option value="textarea">Textarea</option>
+                <option value="select">Select</option>
+                <option value="radio">Radio</option>
                 <option value="date">Date</option>
               </select>
 
-              {(field.type === "radio" ||
-                field.type === "select") && (
+              {/* OPTIONS */}
+              {(field.type === "radio" || field.type === "select") && (
                 <input
                   type="text"
-                  placeholder="Enter options separated by comma"
-                  value={
-                    field.options?.join(",") || ""
-                  }
+                  placeholder="Options (comma separated)"
+                  value={field.options.join(",")}
                   onChange={(e) =>
                     updateField(
                       index,
@@ -198,6 +160,7 @@ export default function AdminPage() {
                 />
               )}
 
+              {/* QUIZ ANSWER */}
               {isQuiz &&
                 (field.type === "radio" ||
                   field.type === "select") && (
@@ -216,7 +179,8 @@ export default function AdminPage() {
                   />
                 )}
 
-              <div className="flex items-center gap-3">
+              {/* REQUIRED */}
+              <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={field.required}
@@ -228,15 +192,15 @@ export default function AdminPage() {
                     )
                   }
                 />
-
-                <label>Required</label>
-              </div>
+                Required
+              </label>
             </div>
           ))}
 
+          {/* SAVE */}
           <button
             onClick={handleSaveForm}
-            className="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition"
+            className="w-full bg-blue-600 text-white py-3 rounded-xl"
           >
             Save Form
           </button>
