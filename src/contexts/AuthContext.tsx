@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, {
@@ -35,6 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token =
       typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
     if (token) {
       fetchUser();
     } else {
@@ -45,9 +45,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchUser = async () => {
     try {
       const response = await api.get("/auth/me");
-      setUser(response.data);
-    } catch {
+
+    
+      setUser(response.data.data);
+    } catch (error) {
       localStorage.removeItem("token");
+      setUser(null);
     } finally {
       setLoading(false);
     }
@@ -55,10 +58,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await api.post("/auth/login", { email, password });
+      const response = await api.post("/auth/login", {
+        email,
+        password,
+      });
+
       const { token, user } = response.data;
+
       localStorage.setItem("token", token);
       setUser(user);
+
       toast.success("Login successful!");
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Login failed");
@@ -73,9 +82,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         password,
       });
+
       const { token, user } = response.data;
+
       localStorage.setItem("token", token);
       setUser(user);
+
       toast.success("Registration successful!");
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Registration failed");

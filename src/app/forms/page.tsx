@@ -1,96 +1,117 @@
-import Link from "next/link";
-import { Navbar } from "@/components/layout/Navbar";
-import { Card } from "@/components/ui/card";
+"use client";
 
-interface Form {
+/**
+ * app/forms/page.tsx
+ * User-facing: list of all forms/quizzes accessible to the logged-in user
+ */
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
+import api from "@/lib/api";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { FileText, Trophy, ChevronRight, LogOut } from "lucide-react";
+import { format } from "date-fns";
+
+type Form = {
   _id: string;
   title: string;
-  description: string;
+  description?: string;
+  isQuiz: boolean;
   version: number;
-}
+  createdAt: string;
+};
 
-async function getForms(): Promise<Form[]> {
-  try {
-    const res = await fetch("http://localhost:5000/api/forms", {
-      cache: "no-store",
-    });
+export default function FormsListPage() {
+  const router = useRouter();
+  const { user, logout } = useAuth();
+  const [forms, setForms] = useState<Form[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    if (!res.ok) {
-      console.error("API Error:", res.status);
-      return [];
+  useEffect(() => {
+    fetchForms();
+  }, []);
+
+  const fetchForms = async () => {
+    try {
+      const res = await api.get("/forms");
+      setForms(res.data.data || res.data || []);
+    } finally {
+      setLoading(false);
     }
-
-    const data = await res.json();
-
-    console.log("Forms API Response:", data);
-
-    if (Array.isArray(data)) {
-      return data;
-    }
-
-    if (data && Array.isArray(data.data)) {
-      return data.data;
-    }
-
-    if (data && Array.isArray(data.forms)) {
-      return data.forms;
-    }
-
-    if (data && data.success && Array.isArray(data.data)) {
-      return data.data;
-    }
-
-    return [];
-  } catch (error) {
-    console.error("Error fetching forms:", error);
-    return [];
-  }
-}
-
-export default async function FormsPage() {
-  const forms = await getForms();
+  };
 
   return (
-    <>
-      <Navbar />
-
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">
-          Available Forms
-        </h1>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {forms?.length === 0 ? (
-            <div className="col-span-3 text-center py-12 border rounded-xl">
-              <p className="text-gray-500">
-                No active forms available.
-              </p>
-            </div>
-          ) : (
-            forms.map((form) => (
-              <Link
-                key={form._id}
-                href={`/forms/${form._id}`}
-              >
-                <Card hover className="p-6">
-                  <h3 className="text-lg font-semibold">
-                    {form.title}
-                  </h3>
-
-                  <p className="text-gray-600 mt-2">
-                    {form.description ||
-                      "No description provided"}
-                  </p>
-
-                  <p className="text-xs text-indigo-600 mt-4">
-                    Version {form.version || 1}
-                  </p>
-                </Card>
-              </Link>
-            ))
-          )}
+    <div className="min-h-screen bg-muted/30">
+      <div className="border-b bg-background">
+        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold">My Forms</h1>
+            <p className="text-xs text-muted-foreground">Welcome, {user?.name}</p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={logout}>
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </div>
-    </>
+
+      <div className="max-w-3xl mx-auto px-4 py-8 space-y-3">
+        {loading ? (
+          [1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardContent className="pt-6 space-y-2">
+                <Skeleton className="h-5 w-2/3" />
+                <Skeleton className="h-4 w-1/2" />
+              </CardContent>
+            </Card>
+          ))
+        ) : forms.length === 0 ? (
+          <div className="text-center py-20 text-muted-foreground">
+            <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
+            <p className="text-sm">No forms available for you right now.</p>
+          </div>
+        ) : (
+          forms.map((form) => (
+            <Card
+              key={form._id}
+              className="cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => router.push(`/forms/${form._id}`)}
+            >
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <CardTitle className="text-base">{form.title}</CardTitle>
+                    {form.description && (
+                      <CardDescription className="mt-0.5 text-xs line-clamp-2">
+                        {form.description}
+                      </CardDescription>
+                    )}
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground mt-1 shrink-0" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-2">
+                  <Badge variant={form.isQuiz ? "default" : "secondary"} className="text-xs">
+                    {form.isQuiz ? (
+                      <><Trophy className="h-3 w-3 mr-1" />Quiz</>
+                    ) : (
+                      <><FileText className="h-3 w-3 mr-1" />Form</>
+                    )}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs">v{form.version}</Badge>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    {format(new Date(form.createdAt), "MMM d, yyyy")}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+    </div>
   );
 }

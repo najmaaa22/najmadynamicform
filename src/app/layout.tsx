@@ -1,10 +1,9 @@
 import "./globals.css";
-import { Providers } from "./providers";
-import { Toaster } from "react-hot-toast";
+import { AuthProvider } from "@/contexts/AuthContext";
 
 export const metadata = {
-  title: "Dynamic Form Builder",
-  description: "Google Forms like system with quiz + access control",
+  title: "Dynamic Form Platform",
+  description: "MERN Dynamic Form Builder",
 };
 
 export default function RootLayout({
@@ -15,10 +14,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Providers>
+        <AuthProvider>
           {children}
-          <Toaster />
-        </Providers>
+        </AuthProvider>
       </body>
     </html>
   );

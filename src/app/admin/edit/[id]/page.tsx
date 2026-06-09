@@ -1,432 +1,349 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import API from "@/lib/api";
-import Select from "react-select";
-
+import { useAuth } from "@/contexts/AuthContext";
+import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  PlusCircle,
+  Trash2,
+  ChevronsUpDown,
+  Check,
+  GripVertical,
+  ArrowLeft,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import toast from "react-hot-toast";
 
-type FieldType = {
+type FieldType =
+  | "text"
+  | "number"
+  | "textarea"
+  | "select"
+  | "radio"
+  | "checkbox"
+  | "date";
+
+type FormField = {
+  id: string;
   fieldId: string;
   label: string;
-  type: string;
+  type: FieldType;
   required: boolean;
-  options?: string[];
-  correctAnswer?: any;
+  options: string[];
+  correctAnswer?: string;
 };
 
-export default function EditFormPage() {
-  const params = useParams();
+type UserOption = {
+  _id: string;
+  name: string;
+  email: string;
+};
 
+const FIELD_TYPES: { value: FieldType; label: string }[] = [
+  { value: "text", label: "Short Text" },
+  { value: "number", label: "Number" },
+  { value: "textarea", label: "Long Text" },
+  { value: "select", label: "Dropdown" },
+  { value: "radio", label: "Multiple Choice" },
+  { value: "checkbox", label: "Checkboxes" },
+  { value: "date", label: "Date" },
+];
+
+const HAS_OPTIONS: FieldType[] = ["select", "radio", "checkbox"];
+
+export default function AdminEditPage() {
+  const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { user } = useAuth();
 
-  const id = params?.id as string;
-
-  const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [isQuiz, setIsQuiz] = useState(false);
-  const [fields, setFields] = useState<FieldType[]>([]);
-
-  const [availableUsers, setAvailableUsers] =
-    useState<{ value: string; label: string }[]>([]);
-
-  const [selectedUsers, setSelectedUsers] =
-    useState<{ value: string; label: string }[]>([]);
+  const [fields, setFields] = useState<FormField[]>([]);
+  const [allUsers, setAllUsers] = useState<UserOption[]>([]);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [userPopoverOpen, setUserPopoverOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [currentVersion, setCurrentVersion] = useState(1);
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setFetching(true);
-
-        // 1. Fetch available users
-        const usersRes = await API.get("/auth/users");
-        const list = (usersRes.data?.data || []).map((u: any) => ({
-          value: u._id,
-          label: `${u.name} (${u.email})`,
-        }));
-        setAvailableUsers(list);
-
-        // 2. Fetch form schema
-        if (id) {
-          const res = await API.get(`/forms/${id}`);
-          const form = res.data?.data;
-
-          setTitle(form.title || "");
-          setDescription(form.description || "");
-          setIsQuiz(form.isQuiz || false);
-          setFields(form.fields || []);
-
-          // Pre-populate whitelisted users
-          const selected = (form.allowedUsers || [])
-            .map((uid: string) => list.find((u: any) => u.value === uid))
-            .filter(Boolean);
-          setSelectedUsers(selected);
-        }
-      } catch (err: any) {
-        console.log(err);
-        alert(err?.response?.data?.message || "Failed to load form");
-      } finally {
-        setFetching(false);
-      }
-    };
-
-    loadData();
+    if (id) {
+      loadForm();
+      fetchUsers();
+    }
   }, [id]);
 
-  const addField = () => {
-    setFields([
-      ...fields,
-      {
-        fieldId:
-          Date.now().toString(),
-
-        label: "",
-
-        type: "text",
-
-        required: false,
-
-        options: [],
-      },
-    ]);
-  };
-
-  const updateField = (
-    index: number,
-    key: string,
-    value: any
-  ) => {
-    const updated = [...fields];
-
-    updated[index] = {
-      ...updated[index],
-      [key]: value,
-    };
-
-    setFields(updated);
-  };
-
-  const removeField = (
-    index: number
-  ) => {
-    const updated = [...fields];
-
-    updated.splice(index, 1);
-
-    setFields(updated);
-  };
-
-  const updateForm = async () => {
+  const loadForm = async () => {
     try {
-      if (!title) {
-        alert("Title required");
-        return;
-      }
+      const res = await api.get(`/forms/${id}`);
+      const form = res.data.data || res.data;
 
-      setLoading(true);
+      setTitle(form.title || "");
+      setDescription(form.description || "");
+      setIsQuiz(form.isQuiz || false);
+      setCurrentVersion(form.version || 1);
 
-      await API.put(
-        `/forms/${id}`,
-        {
-          title,
-          description,
-          isQuiz,
-          fields,
-          allowedUsers: selectedUsers.map((u) => u.value),
-        }
+      setFields(
+        (form.fields || []).map((f: any) => ({
+          id: f.fieldId || Date.now().toString(),
+          fieldId: f.fieldId,
+          label: f.label,
+          type: f.type,
+          required: f.required,
+          options: f.options || [],
+          correctAnswer: f.correctAnswer || "",
+        }))
       );
 
-      alert(
-        "New form version created"
+      setSelectedUsers(
+        (form.allowedUsers || []).map((u: any) =>
+          typeof u === "string" ? u : u._id
+        )
       );
-
-      router.push(
-        "/admin/forms"
-      );
-    } catch (err: any) {
-      console.log(err);
-
-      alert(
-        err?.response?.data
-          ?.message ||
-          "Update failed"
-      );
+    } catch {
+      toast.error("Failed to load form");
+      router.push("/admin/dashboard");
     } finally {
       setLoading(false);
     }
   };
 
-  if (fetching) {
+  const fetchUsers = async () => {
+    try {
+      const res = await api.get("/auth/users");
+      setAllUsers(
+        (res.data.data || res.data || []).filter(
+          (u: UserOption) => u._id !== user?._id
+        )
+      );
+    } catch {}
+  };
+
+  const addField = () => {
+    setFields((prev) => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        fieldId: `field_${Date.now()}`,
+        label: "",
+        type: "text",
+        required: false,
+        options: [],
+        correctAnswer: "",
+      },
+    ]);
+  };
+
+  const removeField = (index: number) =>
+    setFields((prev) => prev.filter((_, i) => i !== index));
+
+  const updateField = <K extends keyof FormField>(
+    index: number,
+    key: K,
+    value: FormField[K]
+  ) => {
+    setFields((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [key]: value };
+      return updated;
+    });
+  };
+
+  const toggleUser = (userId: string) =>
+    setSelectedUsers((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId]
+    );
+
+  const handleSave = async () => {
+    if (!title.trim()) return toast.error("Title required");
+    if (!fields.length) return toast.error("Add at least one question");
+    if (fields.some((f) => !f.label.trim()))
+      return toast.error("All questions need a label");
+
+    setSaving(true);
+
+    try {
+      await api.put(`/forms/${id}`, {
+        title: title.trim(),
+        description: description.trim(),
+        isQuiz,
+        fields: fields.map((f) => ({
+          fieldId: f.fieldId,
+          label: f.label,
+          type: f.type,
+          required: f.required,
+          options: f.options,
+          correctAnswer: isQuiz ? f.correctAnswer : undefined,
+        })),
+        allowedUsers: selectedUsers,
+      });
+
+      toast.success(`Saved as v${currentVersion + 1}`);
+      router.push("/admin/dashboard");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        Loading form...
+      <div className="min-h-screen bg-muted/30 p-6">
+        <Skeleton className="h-10 w-full mb-4" />
+        <Skeleton className="h-28 w-full mb-4" />
+        <Skeleton className="h-40 w-full" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 py-10 px-4">
-      <div className="max-w-5xl mx-auto">
+    <div className="min-h-screen bg-muted/30">
+      <div className="border-b bg-background sticky top-0 z-10">
+        <div className="max-w-3xl mx-auto px-4 py-4 flex justify-between">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => router.push("/admin/dashboard")}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
 
-        <Card className="rounded-3xl shadow-xl">
+          <div>
+            <h1 className="font-semibold">{title || "Untitled"}</h1>
+            <p className="text-xs text-muted-foreground">
+              v{currentVersion} → v{currentVersion + 1}
+            </p>
+          </div>
 
-          <CardHeader>
-            <CardTitle className="text-3xl">
-              Edit Form
-            </CardTitle>
-          </CardHeader>
+          <Button onClick={handleSave} disabled={saving} size="sm">
+            {saving ? "Saving..." : "Publish"}
+          </Button>
+        </div>
+      </div>
 
-          <CardContent className="space-y-8">
+      <div className="max-w-3xl mx-auto p-6 space-y-6">
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
 
-            <div className="space-y-4">
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
 
+            <div className="flex justify-between">
+              <span>Quiz Mode</span>
+              <Switch checked={isQuiz} onCheckedChange={setIsQuiz} />
+            </div>
+          </CardContent>
+        </Card>
+
+        {fields.map((field, index) => (
+          <Card key={field.id}>
+            <CardContent className="pt-5 space-y-3">
               <Input
-                placeholder="Form Title"
-                value={title}
+                value={field.label}
                 onChange={(e) =>
-                  setTitle(
-                    e.target.value
-                  )
+                  updateField(index, "label", e.target.value)
                 }
               />
+              <Select
+  value={field.type}
+  onValueChange={(v) => {
+    if (!v) return;
+    updateField(index, "type", v as FieldType);
+  }}
+>
+  <SelectTrigger>
+    <SelectValue />
+  </SelectTrigger>
 
-              <Input
-                placeholder="Description"
-                value={description}
-                onChange={(e) =>
-                  setDescription(
-                    e.target.value
-                  )
-                }
-              />
+  <SelectContent>
+    {FIELD_TYPES.map((t) => (
+      <SelectItem key={t.value} value={t.value}>
+        {t.label}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
 
-              <div className="flex items-center gap-3">
 
-                <input
-                  type="checkbox"
-                  checked={isQuiz}
+
+              {HAS_OPTIONS.includes(field.type) && (
+                <Input
+                  value={field.options.join(", ")}
                   onChange={(e) =>
-                    setIsQuiz(
-                      e.target.checked
+                    updateField(
+                      index,
+                      "options",
+                      e.target.value.split(",").map((o) => o.trim())
                     )
                   }
                 />
-
-                <label className="font-semibold text-slate-700">
-                  Quiz Mode
-                </label>
-              </div>
-
-              <div className="space-y-1.5 mt-2">
-                <label className="block text-sm font-semibold text-slate-700">
-                  Allow Access To (Users whitelist)
-                </label>
-                <Select
-                  isMulti
-                  options={availableUsers}
-                  value={selectedUsers}
-                  onChange={(selected) => setSelectedUsers((selected as any) || [])}
-                  placeholder="Select users who can access this form..."
-                  className="basic-multi-select"
-                  classNamePrefix="select"
-                  styles={{
-                    control: (base) => ({
-                      ...base,
-                      borderRadius: "12px",
-                      padding: "2px 6px",
-                      borderColor: "#cbd5e1",
-                      "&:hover": { borderColor: "#cbd5e1" }
-                    }),
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-6">
-
-              {fields.map(
-                (field, index) => (
-                  <Card
-                    key={field.fieldId}
-                    className="border"
-                  >
-                    <CardContent className="space-y-4 pt-6">
-
-                      <Input
-                        placeholder="Field Label"
-                        value={
-                          field.label
-                        }
-                        onChange={(e) =>
-                          updateField(
-                            index,
-                            "label",
-                            e.target.value
-                          )
-                        }
-                      />
-
-                      <select
-                        value={
-                          field.type
-                        }
-                        onChange={(e) =>
-                          updateField(
-                            index,
-                            "type",
-                            e.target.value
-                          )
-                        }
-                        className="w-full border rounded-md h-10 px-3"
-                      >
-                        <option value="text">
-                          Text
-                        </option>
-
-                        <option value="number">
-                          Number
-                        </option>
-
-                        <option value="textarea">
-                          Textarea
-                        </option>
-
-                        <option value="select">
-                          Select
-                        </option>
-
-                        <option value="radio">
-                          Radio
-                        </option>
-
-                        <option value="checkbox">
-                          Checkbox
-                        </option>
-
-                        <option value="date">
-                          Date
-                        </option>
-                      </select>
-
-                      {(field.type ===
-                        "select" ||
-                        field.type ===
-                          "radio" ||
-                        field.type ===
-                          "checkbox") && (
-                        <Input
-                          placeholder="Options separated by comma"
-                          value={(
-                            field.options ||
-                            []
-                          ).join(",")}
-                          onChange={(e) =>
-                            updateField(
-                              index,
-                              "options",
-                              e.target.value
-                                .split(",")
-                                .map((o) =>
-                                  o.trim()
-                                )
-                            )
-                          }
-                        />
-                      )}
-
-                      {isQuiz && (
-                        <Input
-                          placeholder="Correct Answer"
-                          value={
-                            field.correctAnswer ||
-                            ""
-                          }
-                          onChange={(e) =>
-                            updateField(
-                              index,
-                              "correctAnswer",
-                              e.target.value
-                            )
-                          }
-                        />
-                      )}
-
-                      <div className="flex items-center justify-between">
-
-                        <div className="flex items-center gap-2">
-
-                          <input
-                            type="checkbox"
-                            checked={
-                              field.required
-                            }
-                            onChange={(e) =>
-                              updateField(
-                                index,
-                                "required",
-                                e.target
-                                  .checked
-                              )
-                            }
-                          />
-
-                          <label>
-                            Required
-                          </label>
-                        </div>
-
-                        <Button
-                          variant="destructive"
-                          onClick={() =>
-                            removeField(
-                              index
-                            )
-                          }
-                        >
-                          Remove
-                        </Button>
-
-                      </div>
-
-                    </CardContent>
-                  </Card>
-                )
               )}
 
-              <Button
-                variant="outline"
-                onClick={addField}
-              >
-                Add Field
-              </Button>
+              <div className="flex justify-between">
+                <Checkbox
+                  checked={field.required}
+                  onCheckedChange={(v: boolean | "indeterminate") =>
+                    updateField(index, "required", v === true)
+                  }
+                />
 
-            </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeField(index)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
 
-            <Button
-              className="w-full"
-              onClick={updateForm}
-              disabled={loading}
-            >
-              {loading
-                ? "Updating..."
-                : "Create New Version"}
-            </Button>
-
-          </CardContent>
-
-        </Card>
-
+        <Button onClick={addField} className="w-full">
+          <PlusCircle className="mr-2 h-4 w-4" />
+          Add Question
+        </Button>
       </div>
     </div>
   );

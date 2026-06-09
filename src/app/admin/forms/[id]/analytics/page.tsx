@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import api from '@/lib/api'; // നിങ്ങളുടെ Axios ഇൻസ്റ്റൻസ്
+import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { ExportCSVButton } from '@/components/admin/ExportCSVButton';
 import { ArrowLeft, Users, Percent, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-// ✅ FIX: ടൈപ്പിലേക്ക് isPublic കൂടി ടൈപ്പ്-സേഫ് ആയി ആഡ് ചെയ്തു
+
 type AnalyticsData = {
   formTitle: string;
   isQuiz: boolean;

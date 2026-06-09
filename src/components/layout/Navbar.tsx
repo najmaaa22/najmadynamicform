@@ -123,6 +123,6 @@ const Navbar: React.FC = () => {
   );
 };
 
-// ✅ Both named and default export
+
 export { Navbar };
 export default Navbar;

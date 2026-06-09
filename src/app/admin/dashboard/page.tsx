@@ -1,215 +1,360 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
 
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { FileText, Reply, Users, LayoutGrid, Plus, ArrowUpRight } from "lucide-react";
 
-type DashboardStats = {
-  totalForms: number;
-  totalResponses: number;
-  totalUsers: number;
-};
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
-type RecentForm = {
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+import { Skeleton } from "@/components/ui/skeleton";
+
+import {
+  PlusCircle,
+  MoreVertical,
+  Pencil,
+  Trash2,
+  BarChart2,
+  Download,
+  FileText,
+  Trophy,
+  Users,
+  LogOut,
+  FileStack,
+} from "lucide-react";
+
+import toast from "react-hot-toast";
+import { format } from "date-fns";
+
+type Form = {
   _id: string;
   title: string;
-  version: number;
-  isQuiz: boolean;
   description?: string;
+  isQuiz: boolean;
+  version: number;
+  isActive: boolean;
+  allowedUsers: string[];
+  createdAt: string;
+  formGroupId: string;
 };
 
-export default function AdminHome() {
-  const [stats, setStats] = useState<DashboardStats>({
-    totalForms: 0,
-    totalResponses: 0,
-    totalUsers: 0,
-  });
+type Analytics = {
+  totalResponses: number;
+  averageScore: number;
+};
 
-  const [recentForms, setRecentForms] = useState<RecentForm[]>([]);
+export default function AdminDashboard() {
+  const router = useRouter();
+  const { user, logout, loading: authLoading } = useAuth();
+
+  const [forms, setForms] = useState<Form[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<Form | null>(null);
+  const [analytics, setAnalytics] = useState<Record<string, Analytics>>({});
+
+  // Admin guard
+  useEffect(() => {
+    if (!authLoading && (!user || user.role !== "admin")) {
+      router.push("/login");
+    }
+  }, [user, authLoading, router]);
 
   useEffect(() => {
-    fetchDashboard();
-  }, []);
+    if (user?.role === "admin") {
+      fetchForms();
+    }
+  }, [user]);
 
-  const fetchDashboard = async () => {
+  const fetchForms = async () => {
     try {
-      setLoading(true);
-
-    
-      const formsRes = await api.get("/forms");
-      
-     
-      const formsResult = formsRes.data;
-      const forms: RecentForm[] = formsResult?.success ? formsResult.data : (formsResult || []);
-
-      setRecentForms(forms.slice(0, 5));
-
-    
-      const responseCounts = await Promise.all(
-        forms.map(async (form) => {
-          try {
-            const res = await api.get(`/responses/${form._id}/responses`);
-            
-          
-            const resData = res.data;
-            const responseList = resData?.success ? resData.data : resData;
-            return Array.isArray(responseList) ? responseList.length : 0;
-          } catch {
-            return 0;
-          }
-        })
-      );
-
-      const totalResponses = responseCounts.reduce((a, b) => a + b, 0);
-
-      setStats({
-        totalForms: forms.length,
-        totalResponses,
-        totalUsers: 12,
-      });
-    } catch (error) {
-      console.error("Dashboard error:", error);
+      const res = await api.get("/forms");
+      const data: Form[] = res.data.data || res.data || [];
+      setForms(data);
+      data.forEach((f) => fetchAnalytics(f._id));
+    } catch {
+      toast.error("Failed to load forms");
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) {
+  const fetchAnalytics = async (formId: string) => {
+    try {
+      const res = await api.get(`/analytics/${formId}`);
+      const data: Analytics = res.data.data || res.data;
+      setAnalytics((prev) => ({ ...prev, [formId]: data }));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await api.delete(`/forms/${deleteTarget._id}`);
+      setForms((prev) => prev.filter((f) => f._id !== deleteTarget._id));
+      toast.success("Form deleted");
+    } catch {
+      toast.error("Failed to delete form");
+    } finally {
+      setDeleteTarget(null);
+    }
+  };
+
+  const handleExport = async (formId: string) => {
+    try {
+      const res = await api.get(`/forms/${formId}/export`, {
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `responses-${formId}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("CSV downloaded");
+    } catch {
+      toast.error("No responses to export");
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    router.push("/login");
+  };
+
+  // Auth loading state
+  if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center space-y-3">
-          <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-slate-500 text-sm font-medium">Loading dashboard data...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-6 md:p-10">
-      <div className="max-w-7xl mx-auto space-y-8">
-
-        {/* HEADER */}
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-              Admin Dashboard
-            </h1>
-            <p className="text-slate-500 text-sm mt-1">
-              Welcome back! Manage your forms, quizzes, and track user submissions.
-            </p>
+    <div className="min-h-screen bg-muted/30">
+      {/* HEADER */}
+      <div className="border-b bg-background">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-9 h-9 bg-blue-600 rounded-xl">
+              <FileStack className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold leading-tight">FormCraft</h1>
+              <p className="text-xs text-muted-foreground">
+                {user?.name} · Admin
+              </p>
+            </div>
           </div>
 
-          <Link href="/admin/forms/new">
-            <Button className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 shadow-sm font-medium">
-              <Plus className="h-4 w-4" /> Create New Form
+          <div className="flex gap-2">
+            <Button onClick={() => router.push("/admin/create")} size="sm">
+              <PlusCircle className="h-4 w-4 mr-1" />
+              New Form
             </Button>
-          </Link>
+            <Button variant="ghost" size="icon" onClick={handleLogout}>
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-
-        {/* STATS CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="border-gray-100 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-semibold text-slate-500">Total Forms</CardTitle>
-              <FileText className="h-4 w-4 text-slate-400" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold text-slate-900">{stats.totalForms}</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-gray-100 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-semibold text-slate-500">Total Responses</CardTitle>
-              <Reply className="h-4 w-4 text-indigo-500" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold text-indigo-600">{stats.totalResponses}</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-gray-100 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-semibold text-slate-500">Registered Users</CardTitle>
-              <Users className="h-4 w-4 text-emerald-500" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold text-emerald-600">{stats.totalUsers}</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* RECENT FORMS LIST */}
-        <Card className="border-gray-100 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between border-b border-gray-50 pb-5">
-            <div className="flex items-center gap-2">
-              <LayoutGrid className="h-5 w-5 text-slate-400" />
-              <CardTitle className="text-xl font-bold text-slate-800">Recent Forms & Quizzes</CardTitle>
-            </div>
-            <Link href="/admin/dashboard">
-              <Button variant="ghost" className="text-indigo-600 hover:text-indigo-700 text-sm gap-1 hover:bg-indigo-50">
-                View All <ArrowUpRight className="h-3.5 w-3.5" />
-              </Button>
-            </Link>
-          </CardHeader>
-
-          <CardContent className="pt-6">
-            {recentForms.length === 0 ? (
-              <div className="text-center py-12 text-slate-400 border border-dashed rounded-xl border-gray-200">
-                No forms created yet. Click the button above to build one.
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {recentForms.map((form) => (
-                  <div
-                    key={form._id}
-                    className="flex flex-col sm:flex-row justify-between sm:items-center p-5 border border-gray-100 rounded-xl bg-slate-50/50 hover:bg-white hover:shadow-sm transition-all gap-4"
-                  >
-                    <div>
-                      <h2 className="text-base font-bold text-slate-800">
-                        {form.title}
-                      </h2>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <span className="text-xs px-2.5 py-0.5 border border-gray-200 bg-white text-slate-600 rounded-md font-medium">
-                          v{form.version}
-                        </span>
-                        <span className={`text-xs px-2.5 py-0.5 rounded-md font-semibold ${form.isQuiz ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                          {form.isQuiz ? "Quiz Mode" : "Standard Form"}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Link href={`/forms/${form._id}`} target="_blank">
-                        <Button variant="outline" size="sm" className="text-slate-700 border-gray-200">
-                          View
-                        </Button>
-                      </Link>
-                      <Link href={`/admin/forms/${form._id}/analytics`}>
-                        <Button size="sm" className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-100 shadow-none">
-                          Analytics
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
       </div>
+
+      {/* BODY */}
+      <div className="max-w-5xl mx-auto px-4 py-8">
+
+        {/* Stats bar */}
+        {!loading && forms.length > 0 && (
+          <div className="flex gap-4 mb-6 text-sm text-muted-foreground">
+            <span>{forms.length} form{forms.length !== 1 ? "s" : ""}</span>
+            <span>·</span>
+            <span>
+              {Object.values(analytics).reduce(
+                (sum, a) => sum + (a.totalResponses ?? 0), 0
+              )} total responses
+            </span>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="grid sm:grid-cols-2 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i}>
+                <CardContent className="pt-6 space-y-3">
+                  <Skeleton className="h-5 w-2/3" />
+                  <Skeleton className="h-4 w-1/2" />
+                  <Skeleton className="h-4 w-1/3" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : forms.length === 0 ? (
+          <div className="text-center py-24">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-muted rounded-2xl mb-4">
+              <FileText className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <p className="font-medium text-lg">No forms yet</p>
+            <p className="text-sm text-muted-foreground mb-6 mt-1">
+              Create your first form to get started
+            </p>
+            <Button onClick={() => router.push("/admin/create")}>
+              <PlusCircle className="h-4 w-4 mr-2" />
+              Create Form
+            </Button>
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-4">
+            {forms.map((form) => {
+              const stats = analytics[form._id];
+              return (
+                <Card key={form._id} className="relative hover:shadow-md transition-shadow">
+                  <CardHeader className="pb-2 pr-10">
+                    <CardTitle className="text-base">{form.title}</CardTitle>
+                    {form.description && (
+                      <CardDescription className="text-xs line-clamp-1">
+                        {form.description}
+                      </CardDescription>
+                    )}
+                    <div className="flex gap-2 mt-2 flex-wrap">
+                      <Badge variant={form.isQuiz ? "default" : "secondary"}>
+                        {form.isQuiz ? (
+                          <><Trophy className="h-3 w-3 mr-1" />Quiz</>
+                        ) : (
+                          <><FileText className="h-3 w-3 mr-1" />Form</>
+                        )}
+                      </Badge>
+                      <Badge variant="outline">v{form.version}</Badge>
+                      <Badge variant={form.isActive ? "outline" : "secondary"}>
+                        {form.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="space-y-3">
+                    <div className="flex gap-4 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3 w-3" />
+                        {form.allowedUsers?.length || 0} users
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <BarChart2 className="h-3 w-3" />
+                        {stats?.totalResponses ?? 0} responses
+                      </span>
+                      {form.isQuiz && stats?.averageScore !== undefined && (
+                        <span>Avg: {stats.averageScore.toFixed(1)}%</span>
+                      )}
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      Created {format(new Date(form.createdAt), "MMM d, yyyy")}
+                    </p>
+
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => router.push(`/admin/responses/${form._id}`)}
+                      >
+                        <BarChart2 className="h-3 w-3 mr-1" />
+                        Responses
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleExport(form._id)}
+                      >
+                        <Download className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </CardContent>
+
+                  {/* DROPDOWN MENU */}
+                  <div className="absolute top-3 right-3">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger>
+                        <Button size="icon" variant="ghost" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => router.push(`/admin/edit/${form._id}`)}
+                        >
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-red-500 focus:text-red-500"
+                          onClick={() => setDeleteTarget(form)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* DELETE CONFIRM DIALOG */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete &quot;{deleteTarget?.title}&quot;?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the form and all its versions. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
