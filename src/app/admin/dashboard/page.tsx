@@ -14,14 +14,12 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,7 +30,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
 import { Skeleton } from "@/components/ui/skeleton";
 
 import {
@@ -66,7 +63,7 @@ type Form = {
 
 type Analytics = {
   totalResponses: number;
-  averageScore: number;
+  averageScore: number | null;
 };
 
 export default function AdminDashboard() {
@@ -78,17 +75,19 @@ export default function AdminDashboard() {
   const [deleteTarget, setDeleteTarget] = useState<Form | null>(null);
   const [analytics, setAnalytics] = useState<Record<string, Analytics>>({});
 
-  // Admin guard
   useEffect(() => {
-    if (!authLoading && (!user || user.role !== "admin")) {
-      router.push("/login");
+    if (authLoading) return;
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+    if (user.role !== "admin") {
+      router.replace("/forms");
     }
   }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (user?.role === "admin") {
-      fetchForms();
-    }
+    if (user?.role === "admin") fetchForms();
   }, [user]);
 
   const fetchForms = async () => {
@@ -96,21 +95,26 @@ export default function AdminDashboard() {
       const res = await api.get("/forms");
       const data: Form[] = res.data.data || res.data || [];
       setForms(data);
-      data.forEach((f) => fetchAnalytics(f._id));
+
+      const analyticsResults = await Promise.allSettled(
+        data.map((f) =>
+          api
+            .get(`/forms/${f._id}/analytics`)
+            .then((r) => ({ id: f._id, data: r.data.data || r.data }))
+        )
+      );
+
+      const analyticsMap: Record<string, Analytics> = {};
+      analyticsResults.forEach((result) => {
+        if (result.status === "fulfilled") {
+          analyticsMap[result.value.id] = result.value.data;
+        }
+      });
+      setAnalytics(analyticsMap);
     } catch {
       toast.error("Failed to load forms");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchAnalytics = async (formId: string) => {
-    try {
-      const res = await api.get(`/analytics/${formId}`);
-      const data: Analytics = res.data.data || res.data;
-      setAnalytics((prev) => ({ ...prev, [formId]: data }));
-    } catch {
-      // ignore
     }
   };
 
@@ -119,7 +123,12 @@ export default function AdminDashboard() {
     try {
       await api.delete(`/forms/${deleteTarget._id}`);
       setForms((prev) => prev.filter((f) => f._id !== deleteTarget._id));
-      toast.success("Form deleted");
+      setAnalytics((prev) => {
+        const updated = { ...prev };
+        delete updated[deleteTarget._id];
+        return updated;
+      });
+      toast.success("Form deleted successfully");
     } catch {
       toast.error("Failed to delete form");
     } finally {
@@ -127,22 +136,22 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleExport = async (formId: string) => {
+  const handleExport = async (form: Form) => {
     try {
-      const res = await api.get(`/forms/${formId}/export`, {
+      const res = await api.get(`/forms/${form._id}/export`, {
         responseType: "blob",
       });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const a = document.createElement("a");
       a.href = url;
-      a.download = `responses-${formId}.csv`;
+      a.download = `${form.title.replace(/\s+/g, "-")}-responses.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
       toast.success("CSV downloaded");
     } catch {
-      toast.error("No responses to export");
+      toast.error("No responses to export yet");
     }
   };
 
@@ -151,7 +160,6 @@ export default function AdminDashboard() {
     router.push("/login");
   };
 
-  // Auth loading state
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -160,9 +168,12 @@ export default function AdminDashboard() {
     );
   }
 
+  if (!user || user.role !== "admin") return null;
+
   return (
     <div className="min-h-screen bg-muted/30">
-      {/* HEADER */}
+
+      {/* ── HEADER ── */}
       <div className="border-b bg-background">
         <div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -172,7 +183,7 @@ export default function AdminDashboard() {
             <div>
               <h1 className="text-lg font-bold leading-tight">FormCraft</h1>
               <p className="text-xs text-muted-foreground">
-                {user?.name} · Admin
+                {user.name} · Admin
               </p>
             </div>
           </div>
@@ -189,18 +200,19 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* BODY */}
+      {/* ── BODY ── */}
       <div className="max-w-5xl mx-auto px-4 py-8">
 
-        {/* Stats bar */}
         {!loading && forms.length > 0 && (
           <div className="flex gap-4 mb-6 text-sm text-muted-foreground">
             <span>{forms.length} form{forms.length !== 1 ? "s" : ""}</span>
             <span>·</span>
             <span>
               {Object.values(analytics).reduce(
-                (sum, a) => sum + (a.totalResponses ?? 0), 0
-              )} total responses
+                (sum, a) => sum + (a?.totalResponses ?? 0),
+                0
+              )}{" "}
+              total responses
             </span>
           </div>
         )}
@@ -236,7 +248,10 @@ export default function AdminDashboard() {
             {forms.map((form) => {
               const stats = analytics[form._id];
               return (
-                <Card key={form._id} className="relative hover:shadow-md transition-shadow">
+                <Card
+                  key={form._id}
+                  className="relative hover:shadow-md transition-shadow"
+                >
                   <CardHeader className="pb-2 pr-10">
                     <CardTitle className="text-base">{form.title}</CardTitle>
                     {form.description && (
@@ -260,7 +275,7 @@ export default function AdminDashboard() {
                   </CardHeader>
 
                   <CardContent className="space-y-3">
-                    <div className="flex gap-4 text-xs text-muted-foreground">
+                    <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
                       <span className="flex items-center gap-1">
                         <Users className="h-3 w-3" />
                         {form.allowedUsers?.length || 0} users
@@ -269,7 +284,7 @@ export default function AdminDashboard() {
                         <BarChart2 className="h-3 w-3" />
                         {stats?.totalResponses ?? 0} responses
                       </span>
-                      {form.isQuiz && stats?.averageScore !== undefined && (
+                      {form.isQuiz && stats?.averageScore != null && (
                         <span>Avg: {stats.averageScore.toFixed(1)}%</span>
                       )}
                     </div>
@@ -283,7 +298,9 @@ export default function AdminDashboard() {
                         size="sm"
                         variant="outline"
                         className="flex-1"
-                        onClick={() => router.push(`/admin/responses/${form._id}`)}
+                        onClick={() =>
+                          router.push(`/admin/responses/${form._id}`)
+                        }
                       >
                         <BarChart2 className="h-3 w-3 mr-1" />
                         Responses
@@ -291,24 +308,33 @@ export default function AdminDashboard() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleExport(form._id)}
+                        onClick={() => handleExport(form)}
+                        title="Export CSV"
                       >
                         <Download className="h-3 w-3" />
                       </Button>
                     </div>
                   </CardContent>
 
-                  {/* DROPDOWN MENU */}
+                  {/* ── DROPDOWN ── */}
                   <div className="absolute top-3 right-3">
                     <DropdownMenu>
+                      {/* FIX: asChild remove — Button directly trigger ആകുന്നു */}
                       <DropdownMenuTrigger>
-                        <Button size="icon" variant="ghost" className="h-8 w-8">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          type="button"
+                        >
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
-                          onClick={() => router.push(`/admin/edit/${form._id}`)}
+                          onClick={() =>
+                            router.push(`/admin/edit/${form._id}`)
+                          }
                         >
                           <Pencil className="h-4 w-4 mr-2" />
                           Edit
@@ -330,7 +356,7 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* DELETE CONFIRM DIALOG */}
+      {/* ── DELETE DIALOG ── */}
       <AlertDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
@@ -341,7 +367,8 @@ export default function AdminDashboard() {
               Delete &quot;{deleteTarget?.title}&quot;?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the form and all its versions. This action cannot be undone.
+              This will permanently delete the form and all its versions.
+              This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

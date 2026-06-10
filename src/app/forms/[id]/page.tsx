@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AxiosError } from "axios";
 
@@ -20,12 +20,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -105,30 +100,35 @@ export default function FormRendererPage() {
 
   /* ---------------- FETCH ---------------- */
 
-  const fetchFormAndResponse = async () => {
+  const fetchFormAndResponse = useCallback(async () => {
+    if (!id) return;
     try {
       setLoading(true);
       setUnauthorized(false);
+      setErrorMessage("");
 
       const formRes = await api.get(`/forms/${id}`);
       const formData = formRes.data?.data ?? formRes.data;
 
-      if (!formData?.isActive) {
-        throw new Error("Form not found");
+      if (!formData) throw new Error("Form not found");
+
+      if (!formData.isActive) {
+        setErrorMessage("This form is no longer active.");
+        setForm(null);
+        return;
       }
 
       setForm(formData);
 
+      // Fetch previous response silently
       try {
         const responseRes = await api.get(`/forms/${id}/my-response`);
-        const responseData =
-          responseRes.data?.data ?? responseRes.data;
-
-        if (responseData) {
+        const responseData = responseRes.data?.data ?? responseRes.data;
+        if (responseData?._id) {
           setPreviousResponse(responseData);
         }
       } catch {
-        // no response
+        // No previous response — fine
       }
     } catch (err) {
       const error = err as AxiosError<any>;
@@ -136,13 +136,16 @@ export default function FormRendererPage() {
       if (error.response?.status === 403) {
         setUnauthorized(true);
         setErrorMessage(
-          error.response?.data?.message || "Unauthorized access"
+          error.response?.data?.message ||
+            "You are not authorized to access this form."
         );
+      } else if (error.response?.status === 404) {
+        setErrorMessage("This form does not exist.");
       } else {
         setErrorMessage(
           error.response?.data?.message ||
             error.message ||
-            "Failed to load form"
+            "Failed to load form."
         );
       }
 
@@ -150,11 +153,11 @@ export default function FormRendererPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
-    if (id) fetchFormAndResponse();
-  }, [id]);
+    fetchFormAndResponse();
+  }, [fetchFormAndResponse]);
 
   /* ---------------- SUBMIT ---------------- */
 
@@ -169,14 +172,16 @@ export default function FormRendererPage() {
 
       toast.success(
         form?.isQuiz
-          ? "Quiz submitted successfully"
-          : "Form submitted successfully"
+          ? "Quiz submitted! Fetching your score..."
+          : "Response submitted successfully!"
       );
 
+      // Refetch to get score / updated response
       await fetchFormAndResponse();
     } catch (err) {
       const error = err as AxiosError<any>;
-      toast.error(error.response?.data?.message || "Submission failed");
+      const msg = error.response?.data?.message || "Submission failed";
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -204,10 +209,11 @@ export default function FormRendererPage() {
       <>
         <Navbar />
         <div className="max-w-md mx-auto mt-24 text-center space-y-4 px-4">
-          <ShieldAlert className="h-10 w-10 text-red-500 mx-auto" />
+          <div className="flex items-center justify-center w-16 h-16 bg-red-50 rounded-full mx-auto">
+            <ShieldAlert className="h-8 w-8 text-red-500" />
+          </div>
           <h2 className="text-2xl font-bold">Access Denied</h2>
-          <p className="text-gray-500 text-sm">{errorMessage}</p>
-
+          <p className="text-muted-foreground text-sm">{errorMessage}</p>
           <Button variant="outline" onClick={() => router.push("/forms")}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Forms
@@ -217,16 +223,20 @@ export default function FormRendererPage() {
     );
   }
 
-  /* ---------------- NOT FOUND ---------------- */
+  /* ---------------- NOT FOUND / INACTIVE ---------------- */
 
   if (!form) {
     return (
       <>
         <Navbar />
-        <div className="max-w-md mx-auto mt-24 text-center space-y-4">
-          <AlertCircle className="h-10 w-10 text-gray-400 mx-auto" />
-          <p className="text-gray-500">{errorMessage}</p>
-
+        <div className="max-w-md mx-auto mt-24 text-center space-y-4 px-4">
+          <div className="flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mx-auto">
+            <AlertCircle className="h-8 w-8 text-gray-400" />
+          </div>
+          <h2 className="text-xl font-semibold">Form Unavailable</h2>
+          <p className="text-muted-foreground text-sm">
+            {errorMessage || "This form could not be loaded."}
+          </p>
           <Button variant="outline" onClick={() => router.push("/forms")}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Forms
@@ -236,7 +246,7 @@ export default function FormRendererPage() {
     );
   }
 
-  /* ---------------- SAFE MAPPING FIX ---------------- */
+  /* ---------------- SAFE FIELD MAPPING ---------------- */
 
   const safeFields: SafeFormField[] = (form.fields ?? []).map((f) => ({
     fieldId: f.fieldId,
@@ -247,15 +257,15 @@ export default function FormRendererPage() {
     correctAnswer: f.correctAnswer,
   }));
 
-  /* ---------------- MAIN ---------------- */
-
   const isQuiz = form.isQuiz;
   const hasSubmitted = !!previousResponse;
   const score = previousResponse?.score;
 
-  const percentage = score
-    ? Math.round((score.obtained / score.total) * 100)
-    : 0;
+  // Fix: avoid division by zero
+  const percentage =
+    score && score.total > 0
+      ? Math.round((score.obtained / score.total) * 100)
+      : 0;
 
   return (
     <>
@@ -271,61 +281,94 @@ export default function FormRendererPage() {
           Back
         </Button>
 
+        {/* Title */}
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold">{form.title}</h1>
-          <Badge>{isQuiz ? "Quiz" : "Form"}</Badge>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-3xl font-bold">{form.title}</h1>
+            <Badge variant={isQuiz ? "default" : "secondary"}>
+              {isQuiz ? "Quiz" : "Form"}
+            </Badge>
+            <Badge variant="outline">v{form.version}</Badge>
+          </div>
+          {form.description && (
+            <p className="text-muted-foreground text-sm">{form.description}</p>
+          )}
         </div>
 
         <Separator />
 
-        {/* SCORE */}
+        {/* QUIZ SCORE — show after submit */}
         {isQuiz && hasSubmitted && score && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Award className="h-5 w-5" />
+                <Award className="h-5 w-5 text-yellow-500" />
                 Your Score
               </CardTitle>
             </CardHeader>
-
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="text-4xl font-bold">
-                {score.obtained} / {score.total} ({percentage}%)
+                {score.obtained}{" "}
+                <span className="text-muted-foreground text-2xl">
+                  / {score.total}
+                </span>
+                <span className="text-lg font-normal text-muted-foreground ml-2">
+                  ({percentage}%)
+                </span>
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                {(score.breakdown ?? []).map((item, i) => (
-                  <div
-                    key={item.fieldId}
-                    className={`text-xs px-2 py-1 rounded ${
-                      item.isCorrect
-                        ? "bg-green-100 text-green-700"
-                        : "bg-red-100 text-red-700"
-                    }`}
-                  >
-                    {item.isCorrect ? (
-                      <CheckCircle2 className="inline w-3 h-3" />
-                    ) : (
-                      <XCircle className="inline w-3 h-3" />
-                    )}{" "}
-                    Q{i + 1}
-                  </div>
-                ))}
-              </div>
+              {/* Per-question breakdown */}
+              {score.breakdown?.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {score.breakdown.map((item, i) => (
+                    <div
+                      key={item.fieldId}
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium ${
+                        item.isCorrect
+                          ? "bg-green-100 text-green-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {item.isCorrect ? (
+                        <CheckCircle2 className="w-3 h-3" />
+                      ) : (
+                        <XCircle className="w-3 h-3" />
+                      )}
+                      Q{i + 1}
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
 
-        {/* FORM */}
-        {(!isQuiz || !hasSubmitted) && (
+        {/* FORM — quiz: hide after submit | form: show read-only with edit option */}
+        {isQuiz && hasSubmitted ? (
+          // Quiz already submitted — show read-only answers
+          <Card>
+            <CardContent className="pt-6">
+              <p className="text-sm text-muted-foreground text-center py-4">
+                You have already submitted this quiz. Multiple attempts are not allowed.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
           <DynamicForm
             fields={safeFields}
             onSubmit={handleSubmit}
             initialData={previousResponse?.answers}
             isQuiz={isQuiz}
-            readOnly={isQuiz && hasSubmitted}
+            readOnly={false}
             submitting={submitting}
           />
+        )}
+
+        {/* Form already submitted — show update note */}
+        {!isQuiz && hasSubmitted && (
+          <p className="text-xs text-muted-foreground text-center">
+            ✏️ You have already submitted this form. You can update your response.
+          </p>
         )}
       </div>
     </>

@@ -20,12 +20,22 @@ interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  isAuthenticated: boolean;
+  login: (email: string, password: string) => Promise<string>;
+  register: (name: string, email: string, password: string) => Promise<string>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// ── Cookie helpers ──
+const setTokenCookie = (token: string) => {
+  document.cookie = `token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+};
+
+const removeTokenCookie = () => {
+  document.cookie = "token=; path=/; max-age=0";
+};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -34,7 +44,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token =
       typeof window !== "undefined" ? localStorage.getItem("token") : null;
-
     if (token) {
       fetchUser();
     } else {
@@ -45,65 +54,87 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchUser = async () => {
     try {
       const response = await api.get("/auth/me");
-
-    
-      setUser(response.data.data);
-    } catch (error) {
+      const userData = response.data?.data ?? response.data?.user ?? null;
+      setUser(userData);
+    } catch {
       localStorage.removeItem("token");
+      removeTokenCookie();
       setUser(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<string> => {
     try {
-      const response = await api.post("/auth/login", {
-        email,
-        password,
-      });
+      const response = await api.post("/auth/login", { email, password });
+      const token = response.data?.token;
+      const userData: User = response.data?.user ?? response.data?.data;
 
-      const { token, user } = response.data;
+      if (!token || !userData) throw new Error("Invalid response from server");
 
+      // Save to both localStorage (api interceptor) + cookie (middleware)
       localStorage.setItem("token", token);
-      setUser(user);
-
+      setTokenCookie(token);
+      setUser(userData);
       toast.success("Login successful!");
+
+      return userData.role;
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Login failed");
+      const message =
+        error.response?.data?.message || error.message || "Login failed";
+      toast.error(message);
       throw error;
     }
   };
 
-  const register = async (name: string, email: string, password: string) => {
+  const register = async (
+    name: string,
+    email: string,
+    password: string
+  ): Promise<string> => {
     try {
       const response = await api.post("/auth/register", {
         name,
         email,
         password,
       });
+      const token = response.data?.token;
+      const userData: User = response.data?.user ?? response.data?.data;
 
-      const { token, user } = response.data;
+      if (!token || !userData) throw new Error("Invalid response from server");
 
       localStorage.setItem("token", token);
-      setUser(user);
-
+      setTokenCookie(token);
+      setUser(userData);
       toast.success("Registration successful!");
+
+      return userData.role; // ← role return cheyyunnu
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Registration failed");
+      const message =
+        error.response?.data?.message || error.message || "Registration failed";
+      toast.error(message);
       throw error;
     }
   };
 
   const logout = () => {
     localStorage.removeItem("token");
+    removeTokenCookie();
     setUser(null);
     toast.success("Logged out successfully");
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, register, logout }}
+      value={{
+        user,
+        loading,
+        isAuthenticated: !!user,
+        login,
+        register,
+        logout,
+      }}
     >
       {children}
     </AuthContext.Provider>

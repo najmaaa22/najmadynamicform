@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,31 +23,39 @@ import toast from "react-hot-toast";
 export default function ResponsesPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+
   const [form, setForm] = useState<any>(null);
   const [responses, setResponses] = useState<any[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  // ── Admin guard ──
   useEffect(() => {
-    if (id) loadAll();
-  }, [id]);
+    if (authLoading) return;
+    if (!user || user.role !== "admin") router.replace("/login");
+  }, [user, authLoading]);
+
+  useEffect(() => {
+    if (id && user?.role === "admin") loadAll();
+  }, [id, user]);
 
   const loadAll = async () => {
     try {
       const [formRes, respRes, analyticsRes] = await Promise.allSettled([
         api.get(`/forms/${id}`),
         api.get(`/forms/${id}/responses`),
-        api.get(`/analytics/${id}`),
+        api.get(`/forms/${id}/analytics`), // FIX: correct route
       ]);
 
       if (formRes.status === "fulfilled")
         setForm(formRes.value.data.data || formRes.value.data);
+
       if (respRes.status === "fulfilled")
         setResponses(respRes.value.data.data || respRes.value.data || []);
+
       if (analyticsRes.status === "fulfilled")
         setAnalytics(analyticsRes.value.data.data || analyticsRes.value.data);
-    } catch {
-      toast.error("Failed to load responses");
     } finally {
       setLoading(false);
     }
@@ -60,16 +69,19 @@ export default function ResponsesPage() {
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const a = document.createElement("a");
       a.href = url;
-      a.download = `responses-${id}.csv`;
+      // FIX: meaningful filename using form title
+      a.download = `${form?.title?.replace(/\s+/g, "-") || id}-responses.csv`;
+      document.body.appendChild(a);
       a.click();
+      a.remove();
       window.URL.revokeObjectURL(url);
       toast.success("CSV downloaded");
     } catch {
-      toast.error("No responses to export");
+      toast.error("No responses to export yet");
     }
   };
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-muted/30 py-8 px-4">
         <div className="max-w-5xl mx-auto space-y-4">
@@ -84,15 +96,25 @@ export default function ResponsesPage() {
               </Card>
             ))}
           </div>
+          <Card>
+            <CardContent className="pt-6 space-y-3">
+              {[1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} className="h-8 w-full" />
+              ))}
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
   }
 
+  if (!user || user.role !== "admin") return null;
+
   return (
     <div className="min-h-screen bg-muted/30 py-8 px-4">
       <div className="max-w-5xl mx-auto space-y-6">
-        {/* Header */}
+
+        {/* ── HEADER ── */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Button
@@ -103,7 +125,7 @@ export default function ResponsesPage() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
-              <h1 className="text-xl font-bold">{form?.title}</h1>
+              <h1 className="text-xl font-bold">{form?.title ?? "Responses"}</h1>
               <p className="text-xs text-muted-foreground">Response Dashboard</p>
             </div>
           </div>
@@ -113,7 +135,7 @@ export default function ResponsesPage() {
           </Button>
         </div>
 
-        {/* Stats cards */}
+        {/* ── STATS ── */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <Card>
             <CardContent className="pt-6">
@@ -134,9 +156,10 @@ export default function ResponsesPage() {
                   <Trophy className="h-4 w-4" />
                   <span className="text-xs">Average Score</span>
                 </div>
+                {/* FIX: null check — non-quiz or no submissions */}
                 <p className="text-3xl font-bold">
                   {analytics?.averageScore != null
-                    ? `${analytics.averageScore.toFixed(1)}%`
+                    ? `${Number(analytics.averageScore).toFixed(1)}%`
                     : "—"}
                 </p>
               </CardContent>
@@ -149,15 +172,17 @@ export default function ResponsesPage() {
                 <BarChart2 className="h-4 w-4" />
                 <span className="text-xs">Version</span>
               </div>
-              <p className="text-3xl font-bold">v{form?.version}</p>
+              <p className="text-3xl font-bold">v{form?.version ?? "—"}</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Responses table */}
+        {/* ── RESPONSES TABLE ── */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">All Responses</CardTitle>
+            <CardTitle className="text-sm">
+              All Responses ({responses.length})
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {responses.length === 0 ? (
@@ -169,13 +194,21 @@ export default function ResponsesPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-xs">Submitted At</TableHead>
-                      <TableHead className="text-xs">Version</TableHead>
+                      <TableHead className="text-xs whitespace-nowrap">
+                        Submitted By
+                      </TableHead>
+                      <TableHead className="text-xs whitespace-nowrap">
+                        Submitted At
+                      </TableHead>
+                      <TableHead className="text-xs">Ver</TableHead>
                       {form?.isQuiz && (
                         <TableHead className="text-xs">Score</TableHead>
                       )}
                       {form?.fields?.map((f: any) => (
-                        <TableHead key={f.fieldId} className="text-xs">
+                        <TableHead
+                          key={f.fieldId}
+                          className="text-xs whitespace-nowrap"
+                        >
                           {f.label}
                         </TableHead>
                       ))}
@@ -184,12 +217,26 @@ export default function ResponsesPage() {
                   <TableBody>
                     {responses.map((resp) => (
                       <TableRow key={resp._id}>
-                        <TableCell className="text-xs whitespace-nowrap">
-                          {format(new Date(resp.submittedAt), "MMM d, yyyy HH:mm")}
+                        {/* Submitted by — populated user */}
+                        <TableCell className="text-xs">
+                          {resp.submittedBy?.name ||
+                            resp.submittedBy?.email ||
+                            "Anonymous"}
                         </TableCell>
+
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {resp.submittedAt
+                            ? format(
+                                new Date(resp.submittedAt),
+                                "MMM d, yyyy HH:mm"
+                              )
+                            : "—"}
+                        </TableCell>
+
                         <TableCell className="text-xs">
                           <Badge variant="outline">v{resp.version}</Badge>
                         </TableCell>
+
                         {form?.isQuiz && (
                           <TableCell className="text-xs font-medium">
                             {resp.score
@@ -197,11 +244,17 @@ export default function ResponsesPage() {
                               : "—"}
                           </TableCell>
                         )}
+
                         {form?.fields?.map((f: any) => {
                           const ans = resp.answers?.[f.fieldId];
                           return (
-                            <TableCell key={f.fieldId} className="text-xs max-w-[160px] truncate">
-                              {Array.isArray(ans) ? ans.join(", ") : ans ?? "—"}
+                            <TableCell
+                              key={f.fieldId}
+                              className="text-xs max-w-[160px] truncate"
+                            >
+                              {Array.isArray(ans)
+                                ? ans.join(", ")
+                                : (ans ?? "—")}
                             </TableCell>
                           );
                         })}
