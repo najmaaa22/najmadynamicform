@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "@/lib/api";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { asArray } from "@/lib/utils";
 
 type FieldType =
   | "text"
@@ -62,11 +63,9 @@ export default function AdminPage() {
 
   const fetchUsers = async () => {
     try {
-      const res = await axios.get(
-        "http://localhost:5000/api/users"
-      );
+      const res = await api.get("/users");
 
-      setUsers(res.data.users);
+      setUsers(asArray<UserType>(res.data));
     } catch (error) {
       console.log(error);
     }
@@ -172,17 +171,7 @@ export default function AdminPage() {
         fields,
       };
 
-      const res = await axios.post(
-        "http://localhost:5000/api/forms",
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem(
-              "token"
-            )}`,
-          },
-        }
-      );
+      const res = await api.post("/forms", formData);
 
       console.log(res.data);
 

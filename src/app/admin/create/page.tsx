@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 
 import { PlusCircle, Trash2, ArrowLeft, X, Check } from "lucide-react";
+import { asArray } from "@/lib/utils";
 
 /* ---------------- TYPES ---------------- */
 
@@ -79,14 +80,14 @@ export default function AdminCreatePage() {
   useEffect(() => {
     if (authLoading) return;
     if (!user || user.role !== "admin") router.replace("/login");
-  }, [user, authLoading]);
+  }, [user, authLoading, router]);
 
   // ── Fetch all users for allowed users selector ──
   useEffect(() => {
     if (user?.role === "admin") {
       api
         .get("/auth/users")
-        .then((res) => setAllUsers(res.data.data || res.data || []))
+        .then((res) => setAllUsers(asArray<UserOption>(res.data)))
         .catch(() => {});
     }
   }, [user]);

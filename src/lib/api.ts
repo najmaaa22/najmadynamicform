@@ -13,6 +13,7 @@ api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {  // ✅ browser check
     const token = localStorage.getItem('token');
     if (token) {
+      config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
     }
   }

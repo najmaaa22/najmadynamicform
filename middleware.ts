@@ -19,9 +19,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Logged in + login/register page → forms
+  // Logged in + login/register page → home (role-based redirect)
   if (token && (pathname === "/login" || pathname === "/register")) {
-    return NextResponse.redirect(new URL("/forms", request.url));
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return NextResponse.next();

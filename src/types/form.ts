@@ -18,6 +18,12 @@ export interface FormField {
 
   options?: string[];
 
+  validation?: {
+    minLength?: number;
+    maxLength?: number;
+    pattern?: string;
+  };
+
   correctAnswer?: string | string[];
 }
 

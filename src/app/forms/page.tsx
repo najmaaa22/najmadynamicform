@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FileText, Trophy, ChevronRight, LogOut } from "lucide-react";
 import { format } from "date-fns";
+import { asArray } from "@/lib/utils";
 
 type Form = {
   _id: string;
@@ -18,6 +19,7 @@ type Form = {
   isQuiz: boolean;
   version: number;
   createdAt: string;
+  allowedUsers?: string[];
 };
 
 export default function FormsListPage() {
@@ -39,13 +41,21 @@ export default function FormsListPage() {
       return;
     }
     fetchForms();
-  }, [user, authLoading]);
+  }, [user, authLoading, fetchForms, router]);
 
-  const fetchForms = async () => {
+  const fetchForms = useCallback(async () => {
     setFormsLoading(true);
     try {
       const res = await api.get("/forms");
-      setForms(res.data.data || res.data || []);
+      const data = asArray<Form>(res.data);
+      const visibleForms = data.filter((form) => {
+        if (user?.role === "admin") return true;
+        if (!Array.isArray(form.allowedUsers) || form.allowedUsers.length === 0) {
+          return true;
+        }
+        return form.allowedUsers.includes(user?._id ?? "");
+      });
+      setForms(visibleForms);
     } catch (error: any) {
       if (error.response?.status === 401) {
         router.replace("/login");
@@ -53,7 +63,7 @@ export default function FormsListPage() {
     } finally {
       setFormsLoading(false);
     }
-  };
+  }, [user, router]);
 
   // Auth still loading — blank screen (avoids flash)
   if (authLoading) {

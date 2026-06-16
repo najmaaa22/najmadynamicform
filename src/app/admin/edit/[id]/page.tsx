@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
@@ -81,17 +81,9 @@ export default function AdminEditPage() {
   useEffect(() => {
     if (authLoading) return;
     if (!user || user.role !== "admin") router.replace("/login");
-  }, [user, authLoading]);
-
-  useEffect(() => {
-    if (id && user?.role === "admin") {
-      loadForm();
-      fetchUsers();
-    }
-  }, [id, user]);
-
+  }, [user, authLoading, router]);
   /* ── LOAD FORM ── */
-  const loadForm = async () => {
+  const loadForm = useCallback(async () => {
     try {
       const res = await api.get(`/forms/${id}`);
       const form = res.data.data || res.data;
@@ -114,9 +106,7 @@ export default function AdminEditPage() {
       );
 
       setSelectedUsers(
-        (form.allowedUsers || []).map((u: any) =>
-          typeof u === "string" ? u : u._id
-        )
+        (form.allowedUsers || []).map((u: any) => (typeof u === "string" ? u : u._id))
       );
     } catch {
       toast.error("Failed to load form");
@@ -124,10 +114,10 @@ export default function AdminEditPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, router]);
 
   /* ── FETCH USERS ── */
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       const res = await api.get("/auth/users");
       setAllUsers(
@@ -136,7 +126,14 @@ export default function AdminEditPage() {
         )
       );
     } catch {}
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (id && user?.role === "admin") {
+      loadForm();
+      fetchUsers();
+    }
+  }, [id, user, loadForm, fetchUsers]);
 
   /* ── FIELD OPERATIONS ── */
   const addField = () => {

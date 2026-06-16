@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-import type { FormField, FieldType } from "@/types";
+import type { FormField, FieldType } from "@/types/form";
 
 export default function CreateFormPage() {
   const router = useRouter();
@@ -44,7 +44,7 @@ export default function CreateFormPage() {
 
   const addField = (type: FieldType) => {
     const newField: FormField = {
-      id: crypto.randomUUID(),
+      fieldId: crypto.randomUUID(),
       label: "",
       type,
       required: false,
@@ -59,23 +59,23 @@ export default function CreateFormPage() {
   };
 
   const updateField = <K extends keyof FormField>(
-    id: string,
+    fieldId: string,
     key: K,
     value: FormField[K]
   ) => {
     setFields((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, [key]: value } : f))
+      prev.map((f) => (f.fieldId === fieldId ? { ...f, [key]: value } : f))
     );
   };
 
-  const removeField = (id: string) => {
-    setFields((prev) => prev.filter((f) => f.id !== id));
+  const removeField = (fieldId: string) => {
+    setFields((prev) => prev.filter((f) => f.fieldId !== fieldId));
   };
 
-  const updateOption = (id: string, index: number, value: string) => {
+  const updateOption = (fieldId: string, index: number, value: string) => {
     setFields((prev) =>
       prev.map((f) => {
-        if (f.id !== id) return f;
+        if (f.fieldId !== fieldId) return f;
         const updated = [...(f.options || [])];
         updated[index] = value;
         return { ...f, options: updated };
@@ -83,18 +83,18 @@ export default function CreateFormPage() {
     );
   };
 
-  const addOption = (id: string) => {
+  const addOption = (fieldId: string) => {
     setFields((prev) =>
       prev.map((f) =>
-        f.id === id ? { ...f, options: [...(f.options || []), ""] } : f
+        f.fieldId === fieldId ? { ...f, options: [...(f.options || []), ""] } : f
       )
     );
   };
 
-  const removeOption = (id: string, index: number) => {
+  const removeOption = (fieldId: string, index: number) => {
     setFields((prev) =>
       prev.map((f) => {
-        if (f.id !== id) return f;
+        if (f.fieldId !== fieldId) return f;
         const updated = [...(f.options || [])];
         updated.splice(index, 1);
         return { ...f, options: updated };
@@ -252,7 +252,7 @@ export default function CreateFormPage() {
             {/* Fields */}
             <div className="space-y-6">
               {fields.map((field) => (
-                <Card key={field.id} className="border">
+                <Card key={field.fieldId} className="border">
                   <CardContent className="p-6 space-y-4">
                     {/* Header */}
                     <div className="flex items-center justify-between">
@@ -262,7 +262,7 @@ export default function CreateFormPage() {
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => removeField(field.id)}
+                        onClick={() => removeField(field.fieldId)}
                       >
                         Remove
                       </Button>
@@ -273,7 +273,7 @@ export default function CreateFormPage() {
                       placeholder="Field Label *"
                       value={field.label}
                       onChange={(e) =>
-                        updateField(field.id, "label", e.target.value)
+                        updateField(field.fieldId, "label", e.target.value)
                       }
                     />
 
@@ -283,7 +283,7 @@ export default function CreateFormPage() {
                         type="checkbox"
                         checked={field.required}
                         onChange={(e) =>
-                          updateField(field.id, "required", e.target.checked)
+                          updateField(field.fieldId, "required", e.target.checked)
                         }
                       />
                       <span className="text-sm">Required</span>
@@ -301,14 +301,14 @@ export default function CreateFormPage() {
                               placeholder={`Option ${index + 1}`}
                               value={option}
                               onChange={(e) =>
-                                updateOption(field.id, index, e.target.value)
+                                updateOption(field.fieldId, index, e.target.value)
                               }
                             />
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={() => removeOption(field.id, index)}
+                              onClick={() => removeOption(field.fieldId, index)}
                             >
                               ✕
                             </Button>
@@ -318,7 +318,7 @@ export default function CreateFormPage() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => addOption(field.id)}
+                          onClick={() => addOption(field.fieldId)}
                         >
                           Add Option
                         </Button>
@@ -338,7 +338,7 @@ export default function CreateFormPage() {
                                 min={0}
                                 value={field.validation?.minLength ?? ""}
                                 onChange={(e) =>
-                                  updateField(field.id, "validation", {
+                                  updateField(field.fieldId, "validation", {
                                     ...field.validation,
                                     minLength: e.target.value
                                       ? Number(e.target.value)
@@ -352,7 +352,7 @@ export default function CreateFormPage() {
                                 min={0}
                                 value={field.validation?.maxLength ?? ""}
                                 onChange={(e) =>
-                                  updateField(field.id, "validation", {
+                                  updateField(field.fieldId, "validation", {
                                     ...field.validation,
                                     maxLength: e.target.value
                                       ? Number(e.target.value)
@@ -366,7 +366,7 @@ export default function CreateFormPage() {
                             placeholder="Regex pattern"
                             value={field.validation?.pattern ?? ""}
                             onChange={(e) =>
-                              updateField(field.id, "validation", {
+                              updateField(field.fieldId, "validation", {
                                 ...field.validation,
                                 pattern: e.target.value || undefined,
                               })
@@ -393,7 +393,7 @@ export default function CreateFormPage() {
                           }
                           onChange={(e) =>
                             updateField(
-                              field.id,
+                              field.fieldId,
                               "correctAnswer",
                               e.target.value
                             )

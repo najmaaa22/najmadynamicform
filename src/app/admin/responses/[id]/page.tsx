@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
@@ -34,13 +34,9 @@ export default function ResponsesPage() {
   useEffect(() => {
     if (authLoading) return;
     if (!user || user.role !== "admin") router.replace("/login");
-  }, [user, authLoading]);
+  }, [user, authLoading, router]);
 
-  useEffect(() => {
-    if (id && user?.role === "admin") loadAll();
-  }, [id, user]);
-
-  const loadAll = async () => {
+  const loadAll = useCallback(async () => {
     try {
       const [formRes, respRes, analyticsRes] = await Promise.allSettled([
         api.get(`/forms/${id}`),
@@ -59,7 +55,11 @@ export default function ResponsesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    if (id && user?.role === "admin") loadAll();
+  }, [id, user, loadAll]);
 
   const handleExport = async () => {
     try {

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AxiosError } from "axios";
 
+import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
 
@@ -62,6 +63,7 @@ interface FormType {
   version: number;
   isActive: boolean;
   fields: FormField[];
+  allowedUsers?: string[];
 }
 
 interface ScoreBreakdown {
@@ -89,6 +91,7 @@ export default function FormRendererPage() {
 
   const id = typeof params?.id === "string" ? params.id : "";
 
+  const { user, loading: authLoading } = useAuth();
   const [form, setForm] = useState<FormType | null>(null);
   const [previousResponse, setPreviousResponse] =
     useState<PreviousResponse | null>(null);
@@ -116,6 +119,30 @@ export default function FormRendererPage() {
         setErrorMessage("This form is no longer active.");
         setForm(null);
         return;
+      }
+
+      const allowedUsers = Array.isArray(formData.allowedUsers)
+        ? formData.allowedUsers.map((u: any) =>
+            typeof u === "string" ? u : u?._id || u?.id
+          )
+        : [];
+
+      if (allowedUsers.length > 0 && user?.role !== "admin") {
+        if (!user) {
+          setUnauthorized(true);
+          setErrorMessage("You must be logged in to access this form.");
+          setForm(null);
+          return;
+        }
+
+        if (!allowedUsers.includes(user._id)) {
+          setUnauthorized(true);
+          setErrorMessage(
+            "You are not authorized to access this form."
+          );
+          setForm(null);
+          return;
+        }
       }
 
       setForm(formData);
@@ -153,11 +180,12 @@ export default function FormRendererPage() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, user]);
 
   useEffect(() => {
+    if (authLoading) return;
     fetchFormAndResponse();
-  }, [fetchFormAndResponse]);
+  }, [fetchFormAndResponse, authLoading]);
 
   /* ---------------- SUBMIT ---------------- */
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
@@ -48,6 +48,7 @@ import {
 
 import toast from "react-hot-toast";
 import { format } from "date-fns";
+import { asArray } from "@/lib/utils";
 
 type Form = {
   _id: string;
@@ -59,6 +60,7 @@ type Form = {
   allowedUsers: string[];
   createdAt: string;
   formGroupId: string;
+  createdBy?: string;
 };
 
 type Analytics = {
@@ -86,15 +88,16 @@ export default function AdminDashboard() {
     }
   }, [user, authLoading, router]);
 
-  useEffect(() => {
-    if (user?.role === "admin") fetchForms();
-  }, [user]);
-
-  const fetchForms = async () => {
+  const fetchForms = useCallback(async () => {
     try {
+      console.log("fetchForms called");
       const res = await api.get("/forms");
-      const data: Form[] = res.data.data || res.data || [];
-      setForms(data);
+      console.log("forms response:", res.data);
+      const data = asArray<Form>(res.data);
+      const visibleForms = data.filter(
+        (form) => !form.createdBy || form.createdBy === user?._id
+      );
+      setForms(visibleForms);
 
       const analyticsResults = await Promise.allSettled(
         data.map((f) =>
@@ -111,12 +114,19 @@ export default function AdminDashboard() {
         }
       });
       setAnalytics(analyticsMap);
-    } catch {
+    } catch (err) {
+      console.log("fetchForms error:", err);
       toast.error("Failed to load forms");
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user?.role === "admin") fetchForms();
+  }, [fetchForms, user?.role]);
+
+  
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
